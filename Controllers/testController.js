@@ -47,9 +47,13 @@ exports.receiveMessage = async (req, res) => {
       console.log(`📨 Message from ${from}: ${text}`);
 
       // Simple auto-reply
-      if (text === "hi") {
-        await sendReply(from, "👋 Welcome! Thanks for saying hi!");
+      if (text === "hi" || text === "hello") {
+        await sendReply(
+          from,
+          "👋 Hello and welcome to Warmy HealthConnect!\n\nWe're here to care for you and your loved ones 💚.\n\nHow can we help you today?\n\nPlease type or choose from below:"
+        );
       }
+
     }
   } catch (err) {
     console.error("❌ Error handling message:", err.stack || err.message);
@@ -60,6 +64,7 @@ exports.receiveMessage = async (req, res) => {
 };
 
 // ✅ Helper function to send WhatsApp message
+// ✅ Helper function to send WhatsApp text+buttons
 async function sendReply(to, body) {
   try {
     const response = await axios.post(
@@ -67,8 +72,38 @@ async function sendReply(to, body) {
       {
         messaging_product: "whatsapp",
         to,
-        type: "text",
-        text: { body },
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: body,
+          },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: {
+                  id: "medicine_delivery",
+                  title: "💊 Medicine Delivery",
+                },
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "care_at_home",
+                  title: "🏥 Care at Home",
+                },
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "lab_test",
+                  title: "🧪 Lab Test at Home",
+                },
+              },
+            ],
+          },
+        },
       },
       {
         headers: {
@@ -78,9 +113,9 @@ async function sendReply(to, body) {
       }
     );
 
-    console.log("✅ Reply sent:", JSON.stringify(response.data, null, 2));
+    console.log("✅ Reply with buttons sent:", JSON.stringify(response.data, null, 2));
   } catch (error) {
-    console.error("❌ Failed to send reply:");
+    console.error("❌ Failed to send reply with buttons:");
     if (error.response) {
       console.error("Status:", error.response.status);
       console.error("Data:", JSON.stringify(error.response.data, null, 2));
