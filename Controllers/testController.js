@@ -1,14 +1,15 @@
-const axios=require('axios')
-
+const axios = require("axios");
 
 // WhatsApp details (from Meta)
 const PHONE_NUMBER_ID = "774499122413641"; // your phone number ID
-const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN; // put your token in .env
-// controllers/webhookController.js
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN; // token from .env
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // verify token from .env
 
 // ✅ Handle GET request for webhook verification
 exports.verifyWebhook = (req, res) => {
+  console.log("🔎 VERIFY WEBHOOK called");
+  console.log("➡️ Query:", req.query);
+
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
@@ -16,17 +17,22 @@ exports.verifyWebhook = (req, res) => {
   if (mode && token) {
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
       console.log("✅ WEBHOOK_VERIFIED");
-      res.status(200).send(challenge);
+      return res.status(200).send(challenge);
     } else {
-      res.sendStatus(403);
+      console.error("❌ Verification failed: token mismatch");
+      return res.sendStatus(403);
     }
+  } else {
+    console.error("❌ Verification failed: missing params");
+    return res.sendStatus(400);
   }
 };
 
 // ✅ Handle POST request (incoming messages)
-exports.receiveMessage = async(req, res) => {
- 
-  console.log("📩 Incoming webhook:", JSON.stringify(req.body, null, 2));
+exports.receiveMessage = async (req, res) => {
+  console.log("📩 Incoming webhook called");
+  console.log("➡️ Headers:", req.headers);
+  console.log("➡️ Body:", JSON.stringify(req.body, null, 2));
 
   try {
     const entry = req.body.entry?.[0];
@@ -40,16 +46,17 @@ exports.receiveMessage = async(req, res) => {
 
       console.log(`📨 Message from ${from}: ${text}`);
 
-      // If user sends "hi", reply with welcome message
+      // Simple auto-reply
       if (text === "hi") {
         await sendReply(from, "👋 Welcome! Thanks for saying hi!");
       }
     }
   } catch (err) {
-    console.error("❌ Error handling message:", err.message);
+    console.error("❌ Error handling message:", err.stack || err.message);
   }
 
-  res.sendStatus(200); // Tell WhatsApp we received the message
+  // Always respond 200 so WhatsApp doesn’t retry
+  res.sendStatus(200);
 };
 
 // ✅ Helper function to send WhatsApp message
@@ -71,18 +78,23 @@ async function sendReply(to, body) {
       }
     );
 
-    console.log("✅ Reply sent:", response.data);
+    console.log("✅ Reply sent:", JSON.stringify(response.data, null, 2));
   } catch (error) {
-    console.error(
-      "❌ Failed to send reply:",
-      error.response?.data || error.message
-    );
+    console.error("❌ Failed to send reply:");
+    if (error.response) {
+      console.error("Status:", error.response.status);
+      console.error("Data:", JSON.stringify(error.response.data, null, 2));
+    } else {
+      console.error("Message:", error.message);
+    }
   }
 }
 
+// ✅ Send template message from client request
+exports.startMessage = async (req, res) => {
+  const { to } = req.body; // recipient number
+  console.log("🚀 Sending template message to:", to);
 
-exports.startMessage=async(req,res)=>{
-  const { to } = req.body;  // recipient number from client side
   try {
     const response = await axios.post(
       `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`,
@@ -91,21 +103,31 @@ exports.startMessage=async(req,res)=>{
         to,
         type: "template",
         template: {
-          name: "hello_world",
-          language: { code: "en_US" }
-        }
+          name: "hello_world", // template must exist in WhatsApp manager
+          language: { code: "en_US" },
+        },
       },
       {
         headers: {
           Authorization: `Bearer ${ACCESS_TOKEN}`,
-          "Content-Type": "application/json"
-        }
+          "Content-Type": "application/json",
+        },
       }
     );
 
+    console.log("✅ Template sent:", JSON.stringify(response.data, null, 2));
     res.json({ success: true, data: response.data });
   } catch (error) {
-    console.error(error.response?.data || error.message);
-    res.status(500).json({ success: false, error: error.response?.data || error.message });
+    console.error("❌ Failed to send template message:");
+    if (error.response) {
+      console.error("Status:", error.response.status);
+      console.error("Data:", JSON.stringify(error.response.data, null, 2));
+      res
+        .status(error.response.status)
+        .json({ success: false, error: error.response.data });
+    } else {
+      console.error("Message:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
-}
+};
